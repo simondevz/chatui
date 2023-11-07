@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { useRouter } from "next/navigation";
 import { User } from "../types";
 import axios from "axios";
+import { App_data } from "../../../../context/context";
 
 export const bazeUrl: string = "http://localhost:8000";
 
@@ -11,7 +12,7 @@ export default function Login() {
   const router = useRouter();
   const passPhrase: string = "!@#$%^&*";
 
-  const [users, setUsers] = useState([]);
+  const { appData, setAppData }: any = useContext(App_data);
   const [errorMsg, setErrorMsg] = useState("");
   const [formData, setFormData] = useState({
     username1: "",
@@ -24,35 +25,52 @@ export default function Login() {
     const populateUsers = async () => {
       const response = await fetch(`${bazeUrl}/chat/users/`);
       const data = await response.json();
-      setUsers(data);
+
+      console.log(data);
+      setAppData((appData: {}) => {
+        return { ...appData, usersList: [...data] };
+      });
     };
 
     populateUsers();
-  }, [setUsers]);
+  }, [setAppData]);
 
   return (
     <>
       <form
         onSubmit={async (event) => {
-          event.preventDefault();
+          try {
+            event.preventDefault();
 
-          // Login path if new user is created
-          if (formData.password2 !== "") {
-            await axios.post(`${bazeUrl}/signup/`, {
-              username: formData.username1,
-              password1: formData.password1,
-              password2: formData.password2,
+            // Login path if new user is created
+            if (formData.password2 !== "") {
+              await axios.post(`${bazeUrl}/signup/`, {
+                username: formData.username1,
+                password1: formData.password1,
+                password2: formData.password2,
+              });
+              router.push("/ws/pickroom");
+              return;
+            }
+
+            // Login as an existing user
+            const response = await axios.post(`${bazeUrl}/chat/login/`, {
+              username: formData.username2,
+              password: formData.password1,
+            });
+
+            setAppData({
+              ...appData,
+              user: response.data.user,
+              tokens: {
+                access: response.data.access,
+                refresh: response.data.refresh,
+              },
             });
             router.push("/ws/pickroom");
-            return;
+          } catch (error) {
+            console.log(error);
           }
-
-          // Login as an existing user
-          await axios.post(`${bazeUrl}/auth/login/`, {
-            username: formData.username2,
-            password: formData.password1,
-          });
-          router.push("/ws/pickroom");
         }}
       >
         <label>Login as:</label>
@@ -69,10 +87,10 @@ export default function Login() {
           disabled={formData.username1 !== ""}
         >
           <option>No one Selected</option>
-          {users.length !== 0 ? (
-            users.map((user: User) => {
+          {appData.usersList?.length !== 0 ? (
+            appData.usersList.map((user: User) => {
               return (
-                <option value={user.username} key={user.id}>
+                <option value={user.username} key={user.pk}>
                   {user.username}
                 </option>
               );
@@ -94,8 +112,8 @@ export default function Login() {
               password2: username + passPhrase,
             });
 
-            for (let index = 0; index < users.length; index++) {
-              const user: User = users[index];
+            for (let index = 0; index < appData.usersList.length; index++) {
+              const user: User = appData.usersList[index];
               if (user.username === username) {
                 setErrorMsg("username already exists😔");
                 return;
